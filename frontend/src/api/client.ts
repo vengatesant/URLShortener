@@ -6,7 +6,10 @@ import type {
   UrlStatsResponse,
 } from "../types/api";
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+// Empty string -> same-origin relative requests, which is what production wants once the
+// backend serves the built frontend itself (see the root Dockerfile). Local dev overrides
+// this via VITE_API_BASE_URL in frontend/.env (see .env.example).
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 export class ApiClientError extends Error {
   status: number;
