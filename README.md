@@ -1,5 +1,7 @@
 # URL Shortener
 
+**Live:** https://url-shortener-zaxs.onrender.com — deployed on Render's free tier (single Docker web service, cold-starts after ~15 min idle) with a free Neon Postgres database. See [Production deployment](#production-deployment) below for how, and what's different from local dev.
+
 A URL shortener built with **React + TypeScript**, **Spring Boot**, and **PostgreSQL** — core create/redirect APIs, per-link click analytics, and the reliability features (caching, rate limiting, soft-delete semantics) called for in the assignment brief.
 
 Full architecture rationale (component diagram, data model, sequence flows, and the trade-off table behind every non-obvious decision) lives in the companion **High-Level Design** document produced earlier in this engagement; the summary below is the condensed version.
@@ -101,6 +103,18 @@ This is also why both a mocked unit-test layer *and* a real-dependency integrati
 | Analytics | Click count, referrer, coarse geo only | No user-level tracking — deliberate, sidesteps PII handling for this scope |
 | Custom domains | Not supported | Single shortener domain only |
 | CI/CD | Not included | Out of scope for this exercise; setup instructions above cover local + Docker runs |
+
+## Production deployment
+
+**Live at https://url-shortener-zaxs.onrender.com** — Render (free web service) + Neon (free Postgres), chosen over Heroku specifically because both have genuinely free tiers with no time-limited trial.
+
+**Topology:** single app, not the two-container split `docker-compose.yml` uses locally. The root-level `Dockerfile` (distinct from `backend/Dockerfile` and `frontend/Dockerfile`, which remain for local Docker Compose) is a three-stage build: Node builds the frontend, Maven embeds the built frontend as Spring Boot static resources and packages the jar, then a slim JRE image runs it. One process serves the API and the SPA from the same origin, which is also why `SpaForwardController` exists — client-side routes like `/links` need a server-side forward to `index.html` on a hard refresh, since there's no static file at that path.
+
+**Environment variables** (set in Render's dashboard, not in the repo): `SPRING_DATASOURCE_URL` / `_USERNAME` / `_PASSWORD` point at the Neon database; `APP_BASE_URL` is the Render-assigned URL, used to build the `shortUrl` returned by the create endpoint. `PORT` is injected by Render itself — `application.yml`'s `server.port: ${PORT:8080}` picks it up automatically, falling back to 8080 for local/Docker Compose use.
+
+**Caught during this deployment, not before:** running the combined build for the first time surfaced a real bug — `NoResourceFoundException` (Spring's static-resource-handler exception for a genuinely missing path) was being caught by `GlobalExceptionHandler`'s generic `Exception.class` fallback and turned into a 500, so every bad URL on the deployed app would have 500'd instead of 404'd. This only shows up once static-resource serving is actually in play, which local dev's split frontend/backend never exercises. Fixed with a specific `NoResourceFoundException → 404` handler, verified locally (packaged jar + local Postgres) before deploying.
+
+**Known trade-off of the free tier:** the Render service spins down after ~15 minutes idle and cold-starts (10–50s) on the next request — acceptable for a portfolio/review link, not for something that needs to always be warm.
 
 ## Project layout
 
